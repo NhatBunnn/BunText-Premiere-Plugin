@@ -1,0 +1,57 @@
+{
+  "manifestVersion": 6,
+  "id": "com.buntext.premiere.plugin",
+  "name": "BunText",
+  "version": "1.0.0",
+  "main": "index.html",
+  "host": {
+    "app": "premierepro",
+    "minVersion": "25.0.0"
+  },
+  "entrypoints": [
+    {
+      "type": "panel",
+      "id": "buntext-panel",
+      "label": {
+        "default": "BunText"
+      },
+      "minimumSize": {
+        "width": 260,
+        "height": 340
+      },
+      "maximumSize": {
+        "width": 2000,
+        "height": 2000
+      },
+      "preferredDockedSize": {
+        "width": 320,
+        "height": 460
+      },
+      "preferredFloatingSize": {
+        "width": 340,
+        "height": 500
+      }
+    }
+  ],
+  "requiredPermissions": {
+    "localFileSystem": "fullAccess",
+    "clipboard": "readAndWrite"
+  },
+  "icons": [
+    {
+      "width": 23,
+      "height": 23,
+      "path": "icons/icon-dark.png",
+      "scale": [1, 2],
+      "theme": ["darkest", "dark", "medium"]
+    },
+    {
+      "width": 48,
+      "height": 48,
+      "path": "icons/plugin-icon-dark.png",
+      "scale": [1, 2],
+      "species": ["pluginList"],
+      "theme": ["darkest", "dark", "medium"]
+    }
+  ]
+}

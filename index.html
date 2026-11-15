@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BunText</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Header -->
+  <header class="header">
+    <div class="brand">
+      <div class="brand-icon">B</div>
+      <h1 class="brand-name">BunText</h1>
+    </div>
+    <span class="version-badge">UXP v1.0</span>
+  </header>
+
+  <!-- Host Connection Status -->
+  <div class="host-status" id="hostStatus">
+    <div class="status-dot" id="statusDot"></div>
+    <span class="status-text" id="statusText">Checking Premiere Pro host...</span>
+  </div>
+
+  <!-- Template Card -->
+  <main class="template-card">
+    <div class="preview-container">
+      <img
+        id="templatePreview"
+        class="preview-img"
+        src="assets/preview.png"
+        alt="hello 2.mogrt preview"
+      />
+      <div id="previewFallback" class="preview-placeholder" style="display: none;">
+        <span>Motion Graphics Template</span>
+      </div>
+    </div>
+
+    <div class="card-body">
+      <div class="template-header">
+        <h2 class="template-title" id="templateName">hello 2.mogrt</h2>
+        <span class="template-format">MOGRT</span>
+      </div>
+
+      <div class="template-meta">
+        <span class="meta-chip">⏱ 10.0s</span>
+        <span class="meta-chip">📺 1920×1080</span>
+        <span class="meta-chip">✏️ Text: "HELLO"</span>
+      </div>
+
+      <!-- Settings Section -->
+      <section class="settings-section">
+        <div class="settings-row">
+          <label class="setting-label" for="trackSelect">Target Video Track:</label>
+          <select id="trackSelect" class="setting-select">
+            <option value="1" selected>V2 (Recommended)</option>
+            <option value="0">V1</option>
+            <option value="2">V3</option>
+            <option value="3">V4</option>
+          </select>
+        </div>
+        <div class="settings-row">
+          <label class="setting-label" for="positionSelect">Insert Position:</label>
+          <select id="positionSelect" class="setting-select">
+            <option value="playhead" selected>Current Playhead (CTI)</option>
+            <option value="start">Sequence Start (00:00:00:00)</option>
+          </select>
+        </div>
+      </section>
+
+      <!-- Apply Button -->
+      <button id="btnApply" class="btn-apply">
+        <svg class="btn-icon" viewBox="0 0 24 24">
+          <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+        </svg>
+        <span>Apply to Timeline</span>
+      </button>
+
+      <!-- Status Notification Message -->
+      <div id="notificationBox" class="notification-box"></div>
+    </div>
+  </main>
+
+  <!-- Diagnostics and Log Toggle -->
+  <div class="diagnostics-toggle" id="diagnosticsToggle">
+    <span>▶ Diagnostics &amp; API Details</span>
+  </div>
+  <pre class="diagnostics-content" id="diagnosticsLog">Initializing BunText UXP plugin...</pre>
+
+  <script src="index.js"></script>
+</body>
+</html>
