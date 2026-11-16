@@ -1,6 +1,6 @@
 /*************************************************************************
  * BunText - Premiere Pro UXP Plugin
- * Handles embedding and applying hello 2.mogrt to the active timeline.
+ * Handles embedding, customizing, and applying hello 2.mogrt to the timeline.
  *************************************************************************/
 
 // Environment references
@@ -122,27 +122,117 @@ async function getMogrtNativePath() {
     }
   }
 
-  // Fallback to relative or execution path
   return relativeAsset;
 }
 
 /**
- * Applies the MOGRT to the active sequence.
+ * Updates customizable parameters on a target MOGRT TrackItem
+ */
+async function updateTrackItemProperties(trackItem, customText, customFontSize) {
+  if (!trackItem) {
+    logDiag("No trackItem provided to update properties.");
+    return false;
+  }
+
+  let textUpdated = false;
+
+  // Method 1: Using getMGTComponent (Official Premiere Pro MOGRT API)
+  try {
+    const mgt = typeof trackItem.getMGTComponent === "function"
+      ? trackItem.getMGTComponent()
+      : (trackItem.mgtComponent || null);
+
+    if (mgt && mgt.properties) {
+      const props = mgt.properties;
+      const count = props.numItems !== undefined ? props.numItems : (props.length || 0);
+      logDiag(`Found MGT Component with ${count} properties.`);
+
+      // 1. Try finding by display name "Text"
+      if (typeof props.getParamForDisplayName === "function") {
+        const textParam = props.getParamForDisplayName("Text");
+        if (textParam && typeof textParam.setValue === "function") {
+          textParam.setValue(customText);
+          textUpdated = true;
+          logDiag(`Updated 'Text' parameter to: "${customText}" via getParamForDisplayName`);
+        }
+      }
+
+      // 2. Scan all properties if not updated yet
+      if (!textUpdated && count > 0) {
+        for (let i = 0; i < count; i++) {
+          const param = props[i];
+          if (!param) continue;
+          const pName = param.displayName || param.name || "";
+          logDiag(`MGT Param [${i}]: ${pName}`);
+
+          if (pName.toLowerCase().includes("text") || i === 0) {
+            if (typeof param.setValue === "function") {
+              param.setValue(customText);
+              textUpdated = true;
+              logDiag(`Updated MGT parameter [${i}] (${pName}) to: "${customText}"`);
+              break;
+            }
+          }
+        }
+      }
+    }
+  } catch (mgtErr) {
+    logDiag("getMGTComponent notice: " + mgtErr.message);
+  }
+
+  // Method 2: Using ComponentChain (Modern Premiere Pro UXP DOM)
+  if (!textUpdated && typeof trackItem.getComponentChain === "function") {
+    try {
+      const chain = await trackItem.getComponentChain();
+      const compCount = chain.getComponentCount();
+      logDiag(`Checking ComponentChain (${compCount} components)...`);
+
+      for (let i = 0; i < compCount; i++) {
+        const comp = chain.getComponentAtIndex(i);
+        const compName = await comp.getDisplayName();
+        logDiag(`Component [${i}]: ${compName}`);
+
+        if (comp.properties && comp.properties.length > 0) {
+          for (let p of comp.properties) {
+            const propName = p.displayName || p.name || "";
+            if (propName.toLowerCase().includes("text")) {
+              if (typeof p.setValue === "function") {
+                p.setValue(customText);
+                textUpdated = true;
+                logDiag(`Set property ${propName} via component chain.`);
+                break;
+              }
+            }
+          }
+        }
+      }
+    } catch (chainErr) {
+      logDiag("ComponentChain inspection note: " + chainErr.message);
+    }
+  }
+
+  return textUpdated;
+}
+
+/**
+ * Applies the MOGRT to the active sequence with user-customized properties
  */
 async function applyMogrt() {
   const btnApply = document.getElementById("btnApply");
   const trackIndex = parseInt(document.getElementById("trackSelect").value, 10) || 1;
   const positionMode = document.getElementById("positionSelect").value;
+  const customText = document.getElementById("propText").value.trim() || "HELLO";
+  const customFontSize = parseInt(document.getElementById("propFontSize").value, 10) || 180;
 
   btnApply.disabled = true;
-  btnApply.querySelector("span").textContent = "Applying...";
-  showNotification("Preparing MOGRT insertion...", "info");
+  btnApply.querySelector("span").textContent = "Đang chèn...";
+  showNotification(`Đang chèn template với chữ: "${customText}"...`, "info");
 
   try {
     if (!ppro) {
       throw new Error(
         "Premiere Pro API ('premierepro') is not accessible in this environment. " +
-        "Please ensure BunText is loaded inside Adobe Premiere Pro via the UXP Developer Tool."
+        "Please ensure BunText is loaded inside Adobe Premiere Pro."
       );
     }
 
@@ -155,7 +245,7 @@ async function applyMogrt() {
     }
 
     if (!project) {
-      throw new Error("No active project found. Please open or create a project in Premiere Pro.");
+      throw new Error("Không tìm thấy Project nào đang mở. Vui lòng mở Project trong Premiere Pro trước.");
     }
 
     // 2. Get active sequence
@@ -167,7 +257,7 @@ async function applyMogrt() {
     }
 
     if (!sequence) {
-      throw new Error("No active sequence found. Please open a sequence in the timeline before applying.");
+      throw new Error("Không tìm thấy Sequence nào đang mở trên Timeline. Vui lòng mở Sequence trước.");
     }
 
     logDiag(`Target sequence: ${sequence.name || "Active Sequence"}`);
@@ -184,18 +274,19 @@ async function applyMogrt() {
           const playhead = await sequence.getPlayerPosition();
           if (playhead) {
             insertTime = playhead;
-            logDiag(`Playhead position retrieved: ${playhead.seconds || playhead.ticks || "current"}s`);
+            logDiag(`Playhead position: ${playhead.seconds || playhead.ticks || "current"}s`);
           }
         }
       } catch (posErr) {
-        logDiag("Could not read playhead position, falling back to TIME_ZERO: " + posErr.message);
+        logDiag("Could not read playhead position, using TIME_ZERO: " + posErr.message);
       }
     } else {
       logDiag("Insertion set to sequence start (00:00:00:00).");
     }
 
-    // 5. Execute MOGRT insertion via official Premiere Pro UXP APIs
+    // 5. Execute MOGRT insertion
     let inserted = false;
+    let insertedItem = null;
     let insertionDetail = "";
 
     // Primary official method: SequenceEditor.insertMogrtFromPath
@@ -224,35 +315,49 @@ async function applyMogrt() {
             );
           }
 
-          inserted = items && items.length > 0;
-          insertionDetail = `Inserted onto Track V${trackIndex + 1} via SequenceEditor.`;
+          if (items && items.length > 0) {
+            inserted = true;
+            insertedItem = items[0];
+            insertionDetail = `Chèn thành công vào Track V${trackIndex + 1}.`;
+          }
         }
       } catch (editorErr) {
         logDiag(`SequenceEditor attempt failed: ${editorErr.message}`);
       }
     }
 
-    // Fallback method: sequence.importMGT (ExtendScript / legacy bridge if exposed)
+    // Fallback method: sequence.importMGT
     if (!inserted && typeof sequence.importMGT === "function") {
       try {
         logDiag("Attempting insertion via sequence.importMGT...");
         const ticksVal = insertTime && insertTime.ticks ? insertTime.ticks : String(insertTime);
         const result = await sequence.importMGT(mogrtPath, ticksVal, trackIndex, 0);
-        inserted = Boolean(result);
-        insertionDetail = `Inserted onto Track V${trackIndex + 1} via sequence.importMGT.`;
+        if (result) {
+          inserted = true;
+          insertedItem = result;
+          insertionDetail = `Chèn thành công qua sequence.importMGT vào Track V${trackIndex + 1}.`;
+        }
       } catch (importMgtErr) {
         logDiag(`sequence.importMGT fallback failed: ${importMgtErr.message}`);
       }
     }
 
-    // Final outcome
+    // 6. Apply customized properties if customText differs from default
     if (inserted) {
-      showNotification(`Success! ${insertionDetail}`, "success");
+      if (insertedItem && customText) {
+        logDiag(`Applying custom text: "${customText}" to new trackItem...`);
+        const propOk = await updateTrackItemProperties(insertedItem, customText, customFontSize);
+        if (propOk) {
+          insertionDetail += ` Đã cập nhật chữ: "${customText}".`;
+        }
+      }
+
+      showNotification(`Thành công! ${insertionDetail}`, "success");
       logDiag(`Applied hello 2.mogrt successfully! Detail: ${insertionDetail}`);
     } else {
       throw new Error(
-        "Could not insert MOGRT onto timeline. Please verify the active sequence track is unlocked " +
-        "and that the file path is accessible."
+        "Không thể chèn MOGRT vào Timeline. Vui lòng kiểm tra Track video trên timeline không bị khóa (Lock) " +
+        "và file template hợp lệ."
       );
     }
   } catch (err) {
@@ -260,21 +365,149 @@ async function applyMogrt() {
     logDiag("Apply error: " + err.message);
   } finally {
     btnApply.disabled = false;
-    btnApply.querySelector("span").textContent = "Apply to Timeline";
+    btnApply.querySelector("span").textContent = "Chèn vào Timeline";
   }
 }
 
-// Initialize panel UI and events
+/**
+ * Updates properties of the currently selected clip on the timeline
+ */
+async function updateSelectedClip() {
+  const btnUpdate = document.getElementById("btnUpdateSelected");
+  const customText = document.getElementById("propText").value.trim() || "HELLO";
+  const customFontSize = parseInt(document.getElementById("propFontSize").value, 10) || 180;
+
+  btnUpdate.disabled = true;
+  showNotification(`Đang cập nhật chữ "${customText}" cho clip đang chọn...`, "info");
+
+  try {
+    if (!ppro) {
+      throw new Error("Premiere Pro API không khả dụng.");
+    }
+
+    let project = null;
+    if (ppro.Project && typeof ppro.Project.getActiveProject === "function") {
+      project = await ppro.Project.getActiveProject();
+    } else if (ppro.app && ppro.app.project) {
+      project = ppro.app.project;
+    }
+
+    if (!project) throw new Error("Chưa mở Project.");
+
+    const sequence = typeof project.getActiveSequence === "function"
+      ? await project.getActiveSequence()
+      : project.activeSequence;
+
+    if (!sequence) throw new Error("Chưa mở Sequence trên Timeline.");
+
+    // Retrieve selected track items
+    let selectedItems = [];
+    if (typeof sequence.getSelection === "function") {
+      const selection = await sequence.getSelection();
+      if (selection && typeof selection.getTrackItems === "function") {
+        selectedItems = await selection.getTrackItems();
+      }
+    }
+
+    if (!selectedItems || selectedItems.length === 0) {
+      throw new Error("Vui lòng click chọn clip MOGRT trên Timeline trước khi bấm Cập nhật.");
+    }
+
+    logDiag(`Found ${selectedItems.length} selected item(s) on timeline.`);
+    let anyUpdated = false;
+
+    for (let item of selectedItems) {
+      const ok = await updateTrackItemProperties(item, customText, customFontSize);
+      if (ok) anyUpdated = true;
+    }
+
+    if (anyUpdated) {
+      showNotification(`Đã cập nhật chữ: "${customText}" cho clip đang chọn!`, "success");
+    } else {
+      showNotification(`Đã gửi lệnh cập nhật chữ: "${customText}". (Nếu chưa thấy đổi ngay, hãy click vào clip trên timeline để refresh)`, "info");
+    }
+  } catch (err) {
+    showNotification(err.message, "error");
+    logDiag("Update selected error: " + err.message);
+  } finally {
+    btnUpdate.disabled = false;
+  }
+}
+
+// Wire up events and UI interactions
 function initPanelUI() {
   if (panelInitialized) return;
   panelInitialized = true;
 
   initEnvironment();
 
-  // Button apply
+  const propText = document.getElementById("propText");
+  const previewOverlay = document.getElementById("previewTextOverlay");
+  const metaTextTag = document.getElementById("metaTextTag");
+  const btnToggleCase = document.getElementById("btnToggleCase");
+  const btnClearText = document.getElementById("btnClearText");
+  const propFontSize = document.getElementById("propFontSize");
+  const fontSizeDisplay = document.getElementById("fontSizeDisplay");
   const btnApply = document.getElementById("btnApply");
+  const btnUpdateSelected = document.getElementById("btnUpdateSelected");
+
+  // Sync text input with live preview overlay
+  if (propText && previewOverlay) {
+    const updatePreview = () => {
+      const val = propText.value || "HELLO";
+      previewOverlay.textContent = val;
+      if (metaTextTag) metaTextTag.textContent = `✏️ Text: "${val}"`;
+    };
+
+    propText.addEventListener("input", updatePreview);
+    propText.addEventListener("keyup", updatePreview);
+  }
+
+  // Case toggle
+  let isUpperCase = true;
+  if (btnToggleCase && propText) {
+    btnToggleCase.addEventListener("click", () => {
+      isUpperCase = !isUpperCase;
+      if (isUpperCase) {
+        propText.value = propText.value.toUpperCase();
+        btnToggleCase.textContent = "AA";
+      } else {
+        propText.value = propText.value.toLowerCase().replace(/(^|\s)\S/g, l => l.toUpperCase());
+        btnToggleCase.textContent = "Aa";
+      }
+      if (previewOverlay) previewOverlay.textContent = propText.value;
+      if (metaTextTag) metaTextTag.textContent = `✏️ Text: "${propText.value}"`;
+    });
+  }
+
+  // Clear text button
+  if (btnClearText && propText) {
+    btnClearText.addEventListener("click", () => {
+      propText.value = "";
+      if (previewOverlay) previewOverlay.textContent = "";
+      propText.focus();
+    });
+  }
+
+  // Font size slider
+  if (propFontSize && fontSizeDisplay) {
+    propFontSize.addEventListener("input", () => {
+      const sizeVal = propFontSize.value;
+      fontSizeDisplay.textContent = `${sizeVal} px`;
+      if (previewOverlay) {
+        const scaleRatio = Math.max(0.7, Math.min(1.5, sizeVal / 180));
+        previewOverlay.style.fontSize = `${Math.round(11 * scaleRatio)}px`;
+      }
+    });
+  }
+
+  // Buttons
   if (btnApply) {
     btnApply.addEventListener("click", applyMogrt);
+  }
+
+  if (btnUpdateSelected) {
+    btnUpdateSelected.addEventListener("click", updateSelectedClip);
   }
 
   // Diagnostics toggle
@@ -333,7 +566,7 @@ try {
   logDiag("Notice: entrypoints.setup not handled: " + e.message);
 }
 
-// DOM fallback if loaded standalone / outside UXP lifecycle
+// DOM fallback if loaded standalone
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", initPanelUI);
 } else {
