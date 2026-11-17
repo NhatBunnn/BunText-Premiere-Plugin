@@ -5,6 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>BunText</title>
   <link rel="stylesheet" href="styles.css" />
+  <script src="jszip.min.js"></script>
+  <script>
+    try {
+      if (typeof window.JSZip === "undefined") {
+        if (typeof module !== "undefined" && module.exports && typeof module.exports.loadAsync === "function") {
+          window.JSZip = module.exports;
+        } else if (typeof require === "function") {
+          window.JSZip = require("./jszip.min.js");
+        }
+      }
+    } catch (e) {
+      console.warn("JSZip binding error:", e);
+    }
+  </script>
 </head>
 <body>
   <div class="panel-container">
@@ -14,7 +28,10 @@
         <div class="brand-icon">B</div>
         <h1 class="brand-name">BunText</h1>
       </div>
-      <span class="version-badge">v1.1</span>
+      <div class="header-right">
+        <button type="button" class="btn-reset" id="btnResetAll" title="Đặt lại mọi thông số mặc định">↺ Reset</button>
+        <span class="version-badge">v1.2</span>
+      </div>
     </header>
 
     <!-- Host Connection Status -->
@@ -23,17 +40,17 @@
       <span class="status-text" id="statusText">Checking Premiere Pro host...</span>
     </div>
 
-    <!-- Template Card -->
+    <!-- Template Card & Live Preview -->
     <main class="template-card">
-      <div class="preview-container">
+      <div class="preview-container" id="previewContainer">
         <img
           id="templatePreview"
           class="preview-img"
           src="assets/preview.png"
           alt="hello 2.mogrt preview"
         />
-        <!-- Dynamic Live Text Preview Overlay -->
-        <div class="preview-text-overlay" id="previewTextOverlay">HELLO</div>
+        <!-- Live WYSIWYG Text Overlay -->
+        <div class="preview-text-overlay pos-center" id="previewTextOverlay">HELLO</div>
         <div id="previewFallback" class="preview-placeholder" style="display: none;">
           <span>Motion Graphics Template</span>
         </div>
@@ -48,21 +65,23 @@
         <div class="template-meta">
           <span class="meta-chip">⏱ 10.0s</span>
           <span class="meta-chip">📺 1920×1080</span>
-          <span class="meta-chip" id="metaTextTag">✏️ Text: "HELLO"</span>
+          <span class="meta-chip" id="charCountChip">5 ký tự</span>
         </div>
 
-        <!-- Properties Customization Section -->
+        <!-- ─── 1. VĂN BẢN (TEXT & FONT) ─── -->
         <section class="properties-section">
           <div class="section-title">
-            <span>PROPERTIES / TÙY CHỈNH</span>
+            <span>1. NỘI DUNG &amp; FONT CHỮ</span>
           </div>
 
-          <!-- Text Input Group -->
+          <!-- Text Input -->
           <div class="prop-group">
             <div class="prop-label-row">
-              <label class="prop-label" for="propText">Nội dung chữ (Text):</label>
+              <label class="prop-label" for="propText">Nội dung chữ:</label>
               <div class="prop-tools">
-                <button type="button" class="btn-text-case" id="btnToggleCase" title="Chuyển hoa / thường">AA</button>
+                <button type="button" class="btn-tool-case" id="btnCaseUpper" title="IN HOA">AA</button>
+                <button type="button" class="btn-tool-case" id="btnCaseTitle" title="Viết Hoa Đầu Từ">Aa</button>
+                <button type="button" class="btn-tool-case" id="btnCaseLower" title="viết thường">aa</button>
               </div>
             </div>
             <div class="input-wrapper">
@@ -73,11 +92,35 @@
                 value="HELLO"
                 placeholder="Nhập nội dung chữ..."
               />
-              <button type="button" id="btnClearText" class="btn-clear" title="Xóa">✕</button>
+              <button type="button" id="btnClearText" class="btn-clear" title="Xóa hết">✕</button>
             </div>
           </div>
 
-          <!-- Font Size Group -->
+          <!-- Font Family Selector -->
+          <div class="prop-group">
+            <div class="prop-label-row">
+              <label class="prop-label" for="propFontFamily">Kiểu Font chữ:</label>
+            </div>
+            <select id="propFontFamily" class="setting-select font-select">
+              <option value="Montserrat-ExtraBoldItalic" selected>Montserrat ExtraBold Italic (Gốc)</option>
+              <option value="Montserrat-Bold">Montserrat Bold</option>
+              <option value="Arial-BoldMT">Arial Black / Bold</option>
+              <option value="Impact">Impact (Bold Title)</option>
+              <option value="Roboto-Bold">Roboto Bold</option>
+              <option value="Helvetica-Bold">Helvetica Bold</option>
+              <option value="BeVietnamPro-ExtraBold">Be Vietnam Pro ExtraBold</option>
+              <option value="TimesNewRomanPS-BoldMT">Times New Roman Bold</option>
+            </select>
+          </div>
+        </section>
+
+        <!-- ─── 2. KÍCH THƯỚC & CĂN CHỈNH (SIZE & POSITION) ─── -->
+        <section class="properties-section">
+          <div class="section-title">
+            <span>2. KÍCH THƯỚC &amp; VỊ TRÍ</span>
+          </div>
+
+          <!-- Font Size -->
           <div class="prop-group">
             <div class="prop-label-row">
               <label class="prop-label" for="propFontSize">Cỡ chữ (Font Size):</label>
@@ -95,9 +138,92 @@
               />
             </div>
           </div>
+
+          <!-- Letter Spacing -->
+          <div class="prop-group">
+            <div class="prop-label-row">
+              <label class="prop-label" for="propTracking">Khoảng cách chữ (Spacing):</label>
+              <span class="prop-val-display" id="trackingDisplay">0 px</span>
+            </div>
+            <div class="slider-row">
+              <input
+                type="range"
+                id="propTracking"
+                class="prop-slider"
+                min="-10"
+                max="40"
+                value="0"
+                step="1"
+              />
+            </div>
+          </div>
+
+          <!-- Position Alignment (Top / Center / Bottom) -->
+          <div class="prop-group">
+            <div class="prop-label-row">
+              <label class="prop-label">Vị trí hiển thị trên màn hình:</label>
+            </div>
+            <div class="btn-group-segmented">
+              <button type="button" class="btn-segment" data-pos="top">Trên (Top)</button>
+              <button type="button" class="btn-segment active" data-pos="center">Giữa (Center)</button>
+              <button type="button" class="btn-segment" data-pos="bottom">Dưới (Lower Third)</button>
+            </div>
+          </div>
         </section>
 
-        <!-- Timeline Target Settings -->
+        <!-- ─── 3. MÀU SẮC & HIỆU ỨNG (COLOR & STYLING) ─── -->
+        <section class="properties-section">
+          <div class="section-title">
+            <span>3. MÀU SẮC &amp; HIỆU ỨNG</span>
+          </div>
+
+          <!-- Text Fill Color -->
+          <div class="prop-group">
+            <div class="prop-label-row">
+              <label class="prop-label" for="propTextColor">Màu chữ (Fill Color):</label>
+              <div class="color-picker-wrapper">
+                <input type="color" id="propTextColor" class="input-color-picker" value="#ffffff" />
+                <span class="color-hex-tag" id="textColorHex">#FFFFFF</span>
+              </div>
+            </div>
+            <!-- Quick Swatches -->
+            <div class="color-swatches">
+              <button type="button" class="color-swatch active" style="background: #ffffff;" data-color="#ffffff" title="Trắng"></button>
+              <button type="button" class="color-swatch" style="background: #ffd700;" data-color="#ffd700" title="Vàng"></button>
+              <button type="button" class="color-swatch" style="background: #ff3b30;" data-color="#ff3b30" title="Đỏ"></button>
+              <button type="button" class="color-swatch" style="background: #007aff;" data-color="#007aff" title="Xanh Dương"></button>
+              <button type="button" class="color-swatch" style="background: #34c759;" data-color="#34c759" title="Xanh Lá"></button>
+              <button type="button" class="color-swatch" style="background: #af52de;" data-color="#af52de" title="Tím"></button>
+              <button type="button" class="color-swatch" style="background: #111111;" data-color="#111111" title="Đen"></button>
+            </div>
+          </div>
+
+          <!-- Stroke / Outline Toggle & Color -->
+          <div class="prop-group">
+            <div class="prop-label-row">
+              <label class="checkbox-label">
+                <input type="checkbox" id="toggleStroke" />
+                <span>Viền chữ (Stroke / Outline Preview)</span>
+              </label>
+              <input type="color" id="propStrokeColor" class="input-color-picker" value="#000000" disabled />
+            </div>
+            <p style="font-size: 10px; color: var(--text-muted); margin-top: 3px;">
+              * Màu chữ áp dụng trực tiếp vào clip. Viền chữ (Stroke) bạn có thể bật thêm trong bảng Properties của Premiere Pro.
+            </p>
+          </div>
+
+          <!-- Drop Shadow Toggle -->
+          <div class="prop-group">
+            <div class="prop-label-row">
+              <label class="checkbox-label">
+                <input type="checkbox" id="toggleShadow" checked />
+                <span>Đổ bóng (Drop Shadow)</span>
+              </label>
+            </div>
+          </div>
+        </section>
+
+        <!-- ─── 4. CÀI ĐẶT TIMELINE (TARGET & POSITION) ─── -->
         <section class="settings-section">
           <div class="settings-row">
             <label class="setting-label" for="trackSelect">Target Video Track:</label>
@@ -117,7 +243,7 @@
           </div>
         </section>
 
-        <!-- Action Buttons -->
+        <!-- ─── ACTION BUTTONS ─── -->
         <div class="action-buttons-group">
           <button id="btnApply" class="btn-apply">
             <svg class="btn-icon" viewBox="0 0 24 24">
@@ -130,7 +256,7 @@
             <svg class="btn-icon" viewBox="0 0 24 24">
               <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
             </svg>
-            <span>Cập nhật Clip đang chọn</span>
+            <span>Cập nhật Clip đang chọn trên Timeline</span>
           </button>
         </div>
 

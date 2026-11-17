@@ -24,6 +24,7 @@ foreach ($target in $targets) {
         Copy-Item -Path "$source\index.html" -Destination "$target\index.html" -Force
         Copy-Item -Path "$source\styles.css" -Destination "$target\styles.css" -Force
         Copy-Item -Path "$source\index.js" -Destination "$target\index.js" -Force
+        Copy-Item -Path "$source\jszip.min.js" -Destination "$target\jszip.min.js" -Force
         Copy-Item -Path "$source\assets" -Destination "$target" -Recurse -Force
         Copy-Item -Path "$source\icons" -Destination "$target" -Recurse -Force
 
